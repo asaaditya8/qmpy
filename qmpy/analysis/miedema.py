@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["Miedema"]
 # data rows:
 # Element_name Phi Rho Vol Z Valence TM? RtoP Htrans
-params = yaml.safe_load(open(qmpy.INSTALL_PATH + "/data/miedema.yml").read())
+params = yaml.safe_load(open("qmpy/data/miedema.yml").read())
 
 
 class Miedema(object):
@@ -43,8 +43,8 @@ class Miedema(object):
         # validate composition
         if isinstance(composition, str):
             composition = parse_comp(composition)
-        elif isinstance(composition, qmpy.Composition):
-            composition = dict(composition.comp)
+#         elif isinstance(composition, qmpy.Composition):
+#             composition = dict(composition.comp)
         elif isinstance(composition, dict):
             pass
         else:
@@ -160,13 +160,17 @@ class Miedema(object):
         gamma = self.P * (QtoP * d_rho ** 2 - d_phi ** 2 - self.RtoP) / m_rho
         return int(round(gamma))
 
-    def H_form_ord(self):
-        """Calculate the enthalpy of formation for an ordered compound of elements A
-        and B with a composition xB of element B."""
+    def H_i_in_j(self):
+        # --------------------------------------------- #
+        ################# Initialization ################
         vol0_A = self.A[2]
         vol0_B = self.B[2]
         phi = [self.A[0], self.B[0]]
-        htrans = [self.A[7], self.B[7]]
+        # --------------------------------------------- #
+
+        ################## Calculation ##################
+
+
         # Determine volume scale parameter a.
         # Calculate surface concentrations using original volumes.
         c_S_A = (1 - self.x) * vol0_A / ((1 - self.x) * vol0_A + self.x * vol0_B)
@@ -176,6 +180,9 @@ class Miedema(object):
         f_AB = c_S_A * (1 + 8 * (c_S_A * c_S_B) ** 2)
         # Calculate new volumes using surface fractions (which use original
         # volumes).
+        
+        ################## Recalculation ################
+
         vol_A = vol0_A * (1 + self.a_A * f_BA * (phi[0] - phi[1]))
         vol_B = vol0_B * (1 + self.a_B * f_AB * (phi[1] - phi[0]))
         # Recalculate surface concentrations using new volumes.
@@ -184,18 +191,37 @@ class Miedema(object):
         # Recalculate surface fractions for ordered compounds using new volumes.
         f_BA = c_S_B * (1 + 8 * (c_S_A * c_S_B) ** 2)
         f_AB = c_S_A * (1 + 8 * (c_S_A * c_S_B) ** 2)
-        D_htrans = self.x * htrans[1] + (1 - self.x) * htrans[0]
-        H_ord = (
-            self.gamma
+
+        ################## Final Calc ###################
+        
+        h_a_in_b = (self.gamma
             * (1 - self.x)
             * self.x
             * vol_A
             * vol_B
             * (1 + 8 * (c_S_A * c_S_B) ** 2)
             / ((1 - self.x) * vol_A + self.x * vol_B)
+        )
+        return h_a_in_b
+
+    def H_form_ord(self):
+        """Calculate the enthalpy of formation for an ordered compound of elements A
+        and B with a composition xB of element B."""
+        
+        h_i_in_j = self.H_i_in_j()
+        htrans = [self.A[7], self.B[7]]
+        D_htrans = self.x * htrans[1] + (1 - self.x) * htrans[0]
+
+        H_ord = (
+            h_i_in_j
             + D_htrans
         )
+
         return round(H_ord * 0.01036427, 2)
+
+    @staticmethod
+    def get_ij(composition):
+        return Miedema(composition).H_i_in_j()
 
     @staticmethod
     def get(composition):
